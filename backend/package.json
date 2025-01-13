@@ -1,0 +1,33 @@
+{
+  "type": "module",
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Hospital System Backend",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon src/index.js"
+  },
+  "keywords": [
+    "Blockchain",
+    "Solidity"
+  ],
+  "author": "Biswajit Debnath",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.17"
+  },
+  "dependencies": {
+    "@helia/json": "^4.0.1",
+    "@helia/strings": "^4.0.1",
+    "@openzeppelin/contracts": "^5.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "express": "^4.21.2",
+    "helia": "^5.1.1",
+    "multiformats": "^13.3.1",
+    "nodemon": "^3.1.9"
+  }
+}
