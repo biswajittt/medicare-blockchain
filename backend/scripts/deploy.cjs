@@ -77,7 +77,7 @@ async function main() {
 
   // Deploy Hospital contract
   const Hospital = await hre.ethers.getContractFactory("Hospital");
-  const hospital = await Hospital.deploy(doctorAddress);
+  const hospital = await Hospital.deploy(doctorAddress, patientAddress);
   await hospital.waitForDeployment();
   const hospitalAddress = await hospital.getAddress();
   console.log("Hospital contract deployed to:", hospitalAddress);

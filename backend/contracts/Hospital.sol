@@ -10,6 +10,22 @@ contract Hospital {
     address public admin; // Hospital admin
     Doctor public doctorContract; // Reference to Doctor contract
     Patient public patientContract;
+    // Enum for specialization
+    enum Specialization {
+        GeneralMedicine, // 0
+        Endocrinology, // 1
+        Psychiatry, // 2
+        Pulmonology, // 3
+        Oncology, // 4
+        Orthopedics, // 5
+        Dentistry, // 6
+        ENT, // 7
+        Ophthalmology, // 8
+        Dermatology, // 9
+        Gastroenterology, // 10
+        Urology, // 11
+        ObstetricsGynecology // 12
+    }
     //Session structure
     struct Session {
         bytes32 keyHash; // Hash of the session key
@@ -20,13 +36,34 @@ contract Hospital {
         string did;
         string cid; // CID of the stored data(stored to ipfs)
         string userUID; //  user id
+        Specialization specialization; // Doctor's specialization as enum
         string publicKey; // Doctor's public key
         bool isFirstLogin; // Whether the doctor is logging in for the first time
         string firstLoginKey;
+        uint8 assignedPatientsCount;
     }
+    //PatientDetails structure
+    struct PatientDetails {
+        string did;
+        string cid; // CID of the stored data(stored to ipfs)
+        string userUID; //  user id
+        string issue;
+        string publicKey; // Doctor's public key
+        bool isFirstLogin; // Whether the doctor is logging in for the first time
+        string firstLoginKey;
+        bool isSerious;
+        string assignedDoctorDID;
+    }
+    // Mapping to store issues corresponding to each specialization
+    mapping(Specialization => string[]) public specializationToIssues;
     mapping(string => Session) private sessions; // Stores session data for users
+    mapping(string => bool) private registeredUsers;
     mapping(string => bool) private registeredDoctors; // user uid -> bool to check if doctor is already registered or not
+    mapping(string => bool) private registeredPatients; // user uid -> bool to check if patient is already registered or not
     mapping(string => DoctorDetails) public doctors; // DID -> DoctorDetails
+    // Mapping to store specialization to doctors
+    mapping(Specialization => DoctorDetails[]) public specializationToDoctors;
+    mapping(string => PatientDetails) public patients; // DID -> PatientDetails
     // Store user counts for each type
     mapping(string => uint256) private userCounts; // "DOCTOR", "PATIENT", etc.
 
@@ -39,6 +76,13 @@ contract Hospital {
         string specialization,
         bool firstLogin
     );
+    event PatientRegistered(
+        string did,
+        string cid,
+        bool firstLogin,
+        string assignedDoctorDID,
+        bool success
+    );
     event DoctorLoginStatus(
         string did,
         string cid,
@@ -49,10 +93,46 @@ contract Hospital {
 
     // mapping(string => PatientDetails) public patients;
 
-    constructor(address _doctorContract) {
+    constructor(address _doctorContract, address _patientContract) {
         admin = msg.sender;
         doctorContract = Doctor(_doctorContract);
-        // patientContract = Patient(_patientContract);
+        patientContract = Patient(_patientContract);
+        // Example: Assign issues to Specializations
+        specializationToIssues[Specialization.GeneralMedicine] = [
+            "fever",
+            "cold",
+            "headache",
+            "cough"
+        ];
+        specializationToIssues[Specialization.Endocrinology] = [
+            "diabetes",
+            "hormonal imbalance"
+        ];
+        specializationToIssues[Specialization.Pulmonology] = ["asthma"];
+        specializationToIssues[Specialization.Oncology] = ["cancer"];
+        specializationToIssues[Specialization.Orthopedics] = [
+            "back pain",
+            "arthritis"
+        ];
+        specializationToIssues[Specialization.Dentistry] = ["tooth pain"];
+        specializationToIssues[Specialization.ENT] = ["ear infection"];
+        specializationToIssues[Specialization.Ophthalmology] = [
+            "vision problems"
+        ];
+        specializationToIssues[Specialization.Dermatology] = ["skin rash"];
+        specializationToIssues[Specialization.Gastroenterology] = [
+            "gastrointestinal issues"
+        ];
+        specializationToIssues[Specialization.Urology] = ["urinary problems"];
+        specializationToIssues[Specialization.ObstetricsGynecology] = [
+            "pregnancy",
+            "menstrual problems"
+        ];
+        specializationToIssues[Specialization.Psychiatry] = [
+            "anxiety",
+            "depression",
+            "mental health"
+        ];
     }
 
     modifier onlyAdmin() {
@@ -63,41 +143,119 @@ contract Hospital {
         _;
     }
 
+    // Function to check if a user exists (public view)
+    function isUserRegistered(
+        string memory userUID
+    ) public view returns (bool) {
+        return registeredUsers[userUID];
+    }
+
     /* DOCTOR START */
+    // Function to convert string specialization to enum
+    function stringToSpecialization(
+        string memory _specialization
+    ) internal pure returns (Specialization) {
+        if (
+            keccak256(bytes(_specialization)) ==
+            keccak256(bytes("General Medicine"))
+        ) {
+            return Specialization.GeneralMedicine;
+        } else if (
+            keccak256(bytes(_specialization)) ==
+            keccak256(bytes("Endocrinology"))
+        ) {
+            return Specialization.Endocrinology;
+        } else if (
+            keccak256(bytes(_specialization)) == keccak256(bytes("Psychiatry"))
+        ) {
+            return Specialization.Psychiatry;
+        } else if (
+            keccak256(bytes(_specialization)) == keccak256(bytes("Pulmonology"))
+        ) {
+            return Specialization.Pulmonology;
+        } else if (
+            keccak256(bytes(_specialization)) == keccak256(bytes("Oncology"))
+        ) {
+            return Specialization.Oncology;
+        } else if (
+            keccak256(bytes(_specialization)) == keccak256(bytes("Orthopedics"))
+        ) {
+            return Specialization.Orthopedics;
+        } else if (
+            keccak256(bytes(_specialization)) == keccak256(bytes("Dentistry"))
+        ) {
+            return Specialization.Dentistry;
+        } else if (
+            keccak256(bytes(_specialization)) == keccak256(bytes("ENT"))
+        ) {
+            return Specialization.ENT;
+        } else if (
+            keccak256(bytes(_specialization)) ==
+            keccak256(bytes("Ophthalmology"))
+        ) {
+            return Specialization.Ophthalmology;
+        } else if (
+            keccak256(bytes(_specialization)) == keccak256(bytes("Dermatology"))
+        ) {
+            return Specialization.Dermatology;
+        } else if (
+            keccak256(bytes(_specialization)) ==
+            keccak256(bytes("Gastroenterology"))
+        ) {
+            return Specialization.Gastroenterology;
+        } else if (
+            keccak256(bytes(_specialization)) == keccak256(bytes("Urology"))
+        ) {
+            return Specialization.Urology;
+        } else {
+            revert("Specialization not found");
+        }
+    }
+
     // register doctor
     function registerDoctor(
         string memory _userUID,
         string memory _cid, // CID of the stored data
         string memory _specialization
     ) public onlyAdmin returns (bool) {
+        // Check if the doctor is already registered with the same userUID
+        require(
+            !registeredUsers[_userUID],
+            "Doctor already registered with the same user UID"
+        );
         // Validate that CID is not empty
         require(
             bytes(_cid).length > 0,
             "Validation Error: CID cannot be empty"
         );
 
-        // Check if the doctor is already registered with the same userUID
-        require(
-            !registeredDoctors[_userUID],
-            "Doctor already registered with the same user ID"
+        // Convert specialization string to enum (you can also use a mapping like above if needed)
+        Specialization specializationEnum = stringToSpecialization(
+            _specialization
         );
-
         string memory year = getCurrentYear(); // Dynamically get the year
         string memory doctorDID = generateDID("DOCTOR", year);
 
         try doctorContract.addDoctor(doctorDID, _specialization, _cid) {
             // On success, mark the doctor as registered with the given Govt ID Hash
-            registeredDoctors[_userUID] = true;
+            registeredUsers[_userUID] = true;
 
             // Store the doctor details in the mapping
             doctors[doctorDID] = DoctorDetails({
                 did: doctorDID,
                 cid: _cid,
                 userUID: _userUID,
+                specialization: specializationEnum, // Store the specialization enum
                 publicKey: "",
                 isFirstLogin: true,
-                firstLoginKey: ""
+                firstLoginKey: "",
+                assignedPatientsCount: 0
             });
+
+            // Add the doctor to the array for the given specialization
+            specializationToDoctors[specializationEnum].push(
+                doctors[doctorDID]
+            );
 
             // Emit event for off-chain processing
             emit DoctorRegistered(
@@ -129,7 +287,7 @@ contract Hospital {
         uint256 duration
     ) external {
         // Check if the doctor is registered
-        require(registeredDoctors[_userUID], "Doctor not registered");
+        require(registeredUsers[_userUID], "Doctor not registered");
         require(duration > 0, "Invalid session duration");
 
         sessions[_userDID] = Session({
@@ -164,7 +322,7 @@ contract Hospital {
         bytes32 _keyHash
     ) public onlyAdmin returns (bool) {
         // Check if the doctor is registered
-        require(registeredDoctors[_userUID], "Doctor not registered");
+        require(registeredUsers[_userUID], "Doctor not registered");
 
         // Verify session validity
         require(
@@ -321,49 +479,138 @@ contract Hospital {
 
     /* DOCTOR END */
 
-    // /* PATIENT */
-    // // Register a new patient
-    // function registerPatient(
-    //     string memory _name,
-    //     string memory _email,
-    //     string memory _phoneNumber,
-    //     string memory _problem,
-    //     bool _isSerious,
-    //     string memory _accountCreationYear
-    // ) public onlyAdmin returns (bool) {
-    //     string memory patientDID = generateDID("PATIENT", _accountCreationYear);
-    //     console.log("patientDID-> ", patientDID);
-    //     try doctorContract.findDoctor(_problem, _isSerious) returns (
-    //         string memory assignedDoctorDID
-    //     ) {
-    //         require(
-    //             bytes(assignedDoctorDID).length > 0,
-    //             "No suitable doctor found"
-    //         );
+    /* PATIENT */
+    // Function to get specialization by issue (No event, only return specialization)
+    function getSpecializationByIssue(
+        string memory issue
+    ) internal view returns (Specialization) {
+        for (
+            uint256 i = 0;
+            i <= uint256(Specialization.ObstetricsGynecology);
+            i++
+        ) {
+            Specialization currentSpecialization = Specialization(i);
+            string[] memory issues = specializationToIssues[
+                currentSpecialization
+            ];
 
-    //         try doctorContract.incrementPatientCount(assignedDoctorDID) {
-    //             try
-    //                 patientContract.addPatient(
-    //                     patientDID,
-    //                     _name,
-    //                     _email,
-    //                     _phoneNumber,
-    //                     _problem,
-    //                     assignedDoctorDID,
-    //                     _isSerious
-    //                 )
-    //             {
-    //                 return true;
-    //             } catch {
-    //                 return false;
-    //             }
-    //         } catch {
-    //             return false;
-    //         }
-    //     } catch {
-    //         return false;
-    //     }
-    // }
+            for (uint256 j = 0; j < issues.length; j++) {
+                if (keccak256(bytes(issues[j])) == keccak256(bytes(issue))) {
+                    return currentSpecialization; // Return the matching specialization
+                }
+            }
+        }
+
+        revert("Issue not found in any specialization");
+    }
+
+    // Register a new patient
+    function registerPatient(
+        string memory _userUID,
+        string memory _cid, // CID of the stored data
+        string memory _issue,
+        bool _isSerious
+    ) public onlyAdmin returns (bool) {
+        // Check if the doctor is already registered with the same userUID
+        require(
+            !registeredUsers[_userUID],
+            "Patient already registered with the same user UID"
+        );
+        string memory year = getCurrentYear(); // Dynamically get the year
+        string memory patientDID = generateDID("PATIENT", year);
+        console.log("patientDID-> ", patientDID);
+
+        //search the specialization by issue
+        Specialization specialization = getSpecializationByIssue(_issue);
+
+        //check doctor available with the specialization
+        //assign doctor with minimum or 0 patient assign
+        // Find the available doctor for this specialization
+        DoctorDetails memory assignedDoctor = findAvailableDoctor(
+            specialization
+        );
+        console.log("assignedDoctor->", assignedDoctor.did);
+        // add patient to patient contrcat
+        bool success = patientContract.addPatient(
+            patientDID,
+            _userUID,
+            _cid,
+            _issue,
+            assignedDoctor.did,
+            _isSerious
+        );
+        //mark the assgined dodctor did to paitient details
+        if (success == true) {
+            registeredUsers[_userUID] = true;
+            patients[patientDID] = PatientDetails({
+                did: patientDID,
+                cid: _cid,
+                userUID: _userUID,
+                issue: _issue,
+                publicKey: "",
+                isFirstLogin: true,
+                firstLoginKey: "",
+                isSerious: _isSerious,
+                assignedDoctorDID: assignedDoctor.did
+            });
+            //emit the event
+            emit PatientRegistered(
+                patientDID,
+                _cid,
+                true,
+                assignedDoctor.did,
+                true
+            );
+            return true;
+        } else {
+            //emit the event
+            emit PatientRegistered(
+                patientDID,
+                _cid,
+                true,
+                assignedDoctor.did,
+                false
+            );
+            return false;
+        }
+    }
+
+    // Function to find the available doctor with the least assigned patients
+    function findAvailableDoctor(
+        Specialization specialization
+    ) public returns (DoctorDetails memory) {
+        // Get the list of doctors for the given specialization
+        DoctorDetails[] storage doctorsDetails = specializationToDoctors[
+            specialization
+        ];
+
+        // Check if there are any doctors available in this specialization
+        require(
+            doctorsDetails.length > 0,
+            "No doctors available for this specialization"
+        );
+
+        // Find the doctor with the least assigned patients
+        uint256 minAssignedPatients = type(uint256).max;
+        uint256 selectedDoctorIndex = 0;
+
+        for (uint256 i = 0; i < doctorsDetails.length; i++) {
+            if (doctorsDetails[i].assignedPatientsCount < minAssignedPatients) {
+                minAssignedPatients = doctorsDetails[i].assignedPatientsCount;
+                selectedDoctorIndex = i;
+            }
+        }
+
+        // Get the selected doctor
+        DoctorDetails memory selectedDoctor = doctorsDetails[
+            selectedDoctorIndex
+        ];
+
+        // Increment the assignedPatientsCount for the selected doctor
+        doctorsDetails[selectedDoctorIndex].assignedPatientsCount += 1;
+
+        return selectedDoctor;
+    }
 
     // // Fetch patient details by DID
     // function getPatientDetails(
